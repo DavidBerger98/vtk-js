@@ -35,6 +35,9 @@ export interface IRendererInitialValues extends IViewportInitialValues {
 	occlusionRatio?: number;
 	maximumNumberOfPeels?: number;
 	texturedBackground?: boolean;
+	backgroundTextureDiffuseStrength?: number;
+	backgroundTextureSpecularStrength?: number;
+	useTextureAsViewBackground?: boolean;
 	pass?: number;
 }
 
@@ -116,6 +119,24 @@ export interface vtkRenderer extends vtkViewport {
 	 * @default null
 	 */
 	getBackgroundTexture(): vtkTexture;
+
+	/**
+	 * Returns the diffuse strength of the set background texture.
+	 * @default 0.5
+	 */
+	getBackgroundTextureDiffuseStrength(): number;
+
+	/**
+	 * Returns the specular strength of the set background texture.
+	 * @default 0.5
+	 */
+	getBackgroundTextureSpecularStrength(): number;
+
+	/**
+	  * Gets whether or not the background texture is being used as the background for the view.
+	  * @param {number} textureAsViewBackground
+	  */
+	getUseTextureAsViewBackground(): boolean;
 
 	/**
 	 * 
@@ -350,6 +371,24 @@ export interface vtkRenderer extends vtkViewport {
 	 * @param {vtkTexture} backgroundTexture 
 	 */
 	setBackgroundTexture(backgroundTexture: vtkTexture): boolean;
+
+	/**
+	 * Sets the diffuse strength of the set background texture.
+	 * @param {number} diffuseStrength the new diffuse strength.
+	 */
+	setBackgroundTextureDiffuseStrength(diffuseStrength: number): boolean;
+
+	 /**
+	  * Sets the specular strength of the set background texture.
+	  * @param {number} specularStrength the new specular strength.
+	  */
+	setBackgroundTextureSpecularStrength(specularStrength: number): boolean;
+
+	/**
+	  * Sets whether or not to use the background texture as the background for the view.
+	  * @param {number} textureAsViewBackground
+	  */
+	setUseTextureAsViewBackground(textureAsViewBackground: boolean): boolean;
 
 	/**
 	 * 

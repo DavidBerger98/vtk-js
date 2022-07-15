@@ -5,6 +5,7 @@ export interface ITextureInitialValues {
 	interpolate?: boolean;
 	edgeClamp?: boolean;
 	imageLoaded?: boolean;
+	mipLevel?: number;
 }
 
 export interface vtkTexture extends vtkAlgorithm {

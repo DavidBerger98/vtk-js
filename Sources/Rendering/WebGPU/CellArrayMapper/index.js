@@ -179,7 +179,6 @@ fn calcDirectionalLight(N: vec3<f32>, V: vec3<f32>, ior: f32, roughness: f32, me
   // control property for the diffuse vs specular roughness
   var diffuse: vec3<f32> = incoming*fujiiOrenNayar(base, roughness, N, L, V); 
   // Stores the specular and diffuse separately to allow for finer post processing
-  // Could also be done (propably more properly) with a struct
   var out = PBRData(diffuse, specular);
   
   return out; // Returns angle along with color of light so the final color can be multiplied by angle as well (creates black areas)
@@ -254,12 +253,14 @@ fn calcSpotLight(N: vec3<f32>, V: vec3<f32>, fragPos: vec3<f32>, ior: f32, rough
 // Takes in a vector and converts it to an equivalent coordinate in a rectilinear texture. Should be replaced with cubemaps at some point
 fn vecToRectCoord(dir: vec3<f32>) -> vec2<f32> {
   var tau: f32 = 6.28318530718;
-  var out: vec2<f32> = vec2<f32>(0.);
+  var pi: f32 = 3.14159265359;
+  var out: vec2<f32> = vec2<f32>(0.0);
 
   out.x = atan2(dir.z, dir.x) / tau;
   out.x += 0.5;
 
-  out.y = (dir.y * .5) + .5;
+  var phix: f32 = length(vec2(dir.x, dir.z));
+  out.y = atan2(dir.y, phix) / pi + 0.5;
 
   return out;
 }
@@ -616,10 +617,13 @@ function vtkWebGPUCellArrayMapper(publicAPI, model) {
 
   // we only apply lighting when there is a "var normal" declaration in the
   // fragment shader code. That is the lighting trigger.
+  // TODO: Fix frame tanking when zooming in close to models
   publicAPI.replaceShaderLight = (hash, pipeline, vertexInput) => {
     if (hash.includes('sel')) return;
     const vDesc = pipeline.getShaderDescription('vertex');
     if (!vDesc.hasOutput('vertexVC')) vDesc.addOutput('vec4<f32>', 'vertexVC');
+
+    const renderer = model.WebGPURenderer.getRenderable();
 
     const fDesc = pipeline.getShaderDescription('fragment');
     let code = fDesc.getCode();
@@ -699,7 +703,27 @@ function vtkWebGPUCellArrayMapper(publicAPI, model) {
         '  var PBR: vec3<f32> = mapperUBO.DiffuseIntensity*kD*diffuse + kS*specular;',
         '  PBR += emission;',
         '  computedColor = vec4<f32>(PBR, mapperUBO.Opacity);',
+        '  //VTK::Light::Impl', // TODO: Find a better way of doing this, because it's ugly
       ]).result;
+      if (renderer.getBackgroundTexture()?.getImageLoaded()) {
+        code = vtkWebGPUShaderCache.substitute(code, '//VTK::Light::Impl', [
+          '  // To get diffuse IBL, the texture is sampled with normals in worldspace',
+          '  var diffuseIBLCoords: vec3<f32> = (transpose(rendererUBO.WCVCNormals) * vec4<f32>(normal, 1.)).xyz;',
+          '  var diffuseCoords: vec2<f32> = vecToRectCoord(diffuseIBLCoords);',
+          '  // To get specular IBL, the texture is sampled as the worldspace reflection between the normal and view vectors',
+          '  // Reflections are first calculated in viewspace, then converted to worldspace to sample the environment',
+          '  var VreflN: vec3<f32> = normalize(reflect(-V, normal));',
+          '  var reflectionIBLCoords = (transpose(rendererUBO.WCVCNormals) * vec4<f32>(VreflN, 1.)).xyz;',
+          '  var specularCoords: vec2<f32> = vecToRectCoord(reflectionIBLCoords);',
+          // Sampling at level 999 should ensure that the last mipmap is always used, which may not be a good thing in the future but for now works fine
+          '  var diffuseIBL = textureSampleLevel(BackgroundTexture, BackgroundTextureSampler, diffuseCoords, 999);',
+          // Level multiplier should be set by UBO
+          '  var level = roughness * rendererUBO.MaxBackgroundMipLevel;',
+          '  var specularIBL = textureSampleLevel(BackgroundTexture, BackgroundTextureSampler, specularCoords, level);', // Manual mip smoothing since not all formats support smooth level sampling
+          '  computedColor += vec4<f32>(specularIBL.rgb*kS*rendererUBO.BackgroundSpecularStrength, 1);',
+          '  computedColor += vec4<f32>(diffuseIBL.rgb*kD*rendererUBO.BackgroundDiffuseStrength*baseColor, 1);', // Multipy by baseColor may be changed
+        ]).result;
+      }
       fDesc.setCode(code);
       // If theres no normals, just set the specular color to be flat
     } else {
@@ -772,7 +796,7 @@ function vtkWebGPUCellArrayMapper(publicAPI, model) {
     let code = vDesc.getCode();
     vDesc.addOutput(`vec${numComp}<f32>`, 'tcoordVS');
     code = vtkWebGPUShaderCache.substitute(code, '//VTK::TCoord::Impl', [
-      '  output.tcoordVS = tcoord;', // Ensure that UV coordinates are always between 0-1
+      '  output.tcoordVS = tcoord;',
     ]).result;
     vDesc.setCode(code);
 
@@ -1171,10 +1195,35 @@ function vtkWebGPUCellArrayMapper(publicAPI, model) {
           const interpolate = srcTexture.getInterpolate()
             ? 'linear'
             : 'nearest';
-          tview.addSampler(model.device, {
-            minFilter: interpolate,
-            magFilter: interpolate,
-          });
+          let addressMode = null;
+          if (
+            !addressMode &&
+            srcTexture.getEdgeClamp() &&
+            srcTexture.getRepeat()
+          )
+            addressMode = 'mirror-repeat';
+          if (!addressMode && srcTexture.getEdgeClamp())
+            addressMode = 'clamp-to-edge';
+          if (!addressMode && srcTexture.getRepeat()) addressMode = 'repeat';
+
+          if (textureName !== 'Background') {
+            tview.addSampler(model.device, {
+              addressModeU: addressMode,
+              addressModeV: addressMode,
+              addressModeW: addressMode,
+              minFilter: interpolate,
+              magFilter: interpolate,
+            });
+          } else {
+            tview.addSampler(model.device, {
+              addressModeU: 'repeat',
+              addressModeV: 'clamp-to-edge',
+              addressModeW: 'repeat',
+              minFilter: interpolate,
+              magFilter: interpolate,
+              mipmapFilter: 'linear',
+            });
+          }
         }
       }
     }

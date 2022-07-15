@@ -616,6 +616,9 @@ const DEFAULT_VALUES = {
 
   texturedBackground: false,
   backgroundTexture: null,
+  backgroundTextureDiffuseStrength: 0.5,
+  backgroundTextureSpecularStrength: 0.5,
+  useTextureAsViewBackground: false,
 
   pass: 0,
 };
@@ -665,6 +668,9 @@ export function extend(publicAPI, model, initialValues = {}) {
     'delegate',
     'backgroundTexture',
     'texturedBackground',
+    'backgroundTextureDiffuseStrength',
+    'backgroundTextureSpecularStrength',
+    'useTextureAsViewBackground',
     'useShadows',
     'pass',
   ]);
