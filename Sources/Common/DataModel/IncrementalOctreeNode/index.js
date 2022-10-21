@@ -106,6 +106,33 @@ function vtkIncrementalOctreeNode(publicAPI, model) {
     bounds[5] = model.maxBounds[2];
   };
 
+  publicAPI.getChildIndex = (point) =>
+    Number(point[0] > model.children[0].maxBounds[0]) +
+    // eslint-disable-next-line no-bitwise
+    (Number(point[1] > model.children[0].maxBounds[1]) << 1) +
+    // eslint-disable-next-line no-bitwise
+    (Number(point[2] > model.children[0].maxBounds[2]) << 2);
+
+  publicAPI.containsPoint = (pnt) =>
+    model.minBounds[0] < pnt[0] &&
+    pnt[0] <= model.maxBounds[0] &&
+    model.minBounds[1] < pnt[1] &&
+    pnt[1] <= model.maxBounds[1] &&
+    model.minBounds[2] < pnt[2] &&
+    pnt[2] <= model.maxBounds[2]
+      ? 1
+      : 0;
+
+  publicAPI.containsPointByData = (pnt) =>
+    model.minDataBounds[0] <= pnt[0] &&
+    pnt[0] <= model.maxDataBounds[0] &&
+    model.minDataBounds[1] <= pnt[1] &&
+    pnt[1] <= model.maxDataBounds[1] &&
+    model.minDataBounds[2] <= pnt[2] &&
+    pnt[2] <= model.maxDataBounds[2]
+      ? 1
+      : 0;
+
   //------------------------------------------------------------------------------
   publicAPI.updateCounterAndDataBounds = (point, nHits, updateData) => {
     model.numberOfPoints += nHits;
@@ -763,7 +790,7 @@ export function extend(publicAPI, model, initialValues = {}) {
     6
   );
 
-  macro.get(publicAPI, model, ['pointIdSet']);
+  macro.get(publicAPI, model, ['pointIdSet', 'numberOfPoints']);
 
   // TODO: No get?
   macro.set(publicAPI, model, ['parent']);
