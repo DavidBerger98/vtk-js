@@ -410,7 +410,7 @@ function vtkIncrementalOctreeNode(publicAPI, model) {
       tempId = pntIds[i];
       points.getPoint(tempId, tempPt);
       target = publicAPI.getChildIndex(tempPt);
-      model.children[target].getPointIdSet().insertNextId(tempId);
+      model.children[target].getPointIdSet().push(tempId);
       model.children[target].updateCounterAndDataBounds(tempPt);
       numIds[target]++;
     }
@@ -465,7 +465,7 @@ function vtkIncrementalOctreeNode(publicAPI, model) {
     // objects at hand.
     for (i = 0; i < 8; i++) {
       if (numIds[i] === 0 || i === dvidId) {
-        model.children[i].deletePointIdSet();
+        model.children[i].getPointIdSet().length = 0;
       }
     }
 
